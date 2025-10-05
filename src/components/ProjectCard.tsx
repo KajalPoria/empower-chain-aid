@@ -2,7 +2,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { Heart, TrendingUp, Users, Calendar } from "lucide-react";
+import { Heart, TrendingUp, Users, Calendar, Trash2 } from "lucide-react";
 
 interface Project {
   id: number;
@@ -19,9 +19,10 @@ interface Project {
 interface ProjectCardProps {
   project: Project;
   onDonate: (projectId: number) => void;
+  onDelete?: (projectId: number) => void;
 }
 
-const ProjectCard = ({ project, onDonate }: ProjectCardProps) => {
+const ProjectCard = ({ project, onDonate, onDelete }: ProjectCardProps) => {
   const progress = (project.current_funding / project.funding_goal) * 100;
   const daysAgo = Math.floor((Date.now() - project.created_at) / (1000 * 60 * 60 * 24));
 
@@ -76,6 +77,16 @@ const ProjectCard = ({ project, onDonate }: ProjectCardProps) => {
           <Button variant="outline" size="icon">
             <TrendingUp className="w-4 h-4" />
           </Button>
+          {onDelete && (
+            <Button 
+              variant="outline" 
+              size="icon"
+              onClick={() => onDelete(project.id)}
+              className="hover:bg-destructive/10 hover:text-destructive hover:border-destructive"
+            >
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          )}
         </div>
       </div>
     </Card>

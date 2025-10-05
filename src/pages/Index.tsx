@@ -1,5 +1,15 @@
 import { useState } from "react";
 import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import Header from "@/components/Header";
 import Hero from "@/components/Hero";
 import ProjectCard from "@/components/ProjectCard";
@@ -63,6 +73,7 @@ const Index = () => {
   const [selectedProject, setSelectedProject] = useState<number | null>(null);
   const [showDonationDialog, setShowDonationDialog] = useState(false);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [deleteProjectId, setDeleteProjectId] = useState<number | null>(null);
 
   const stats = {
     totalProjects: projects.length,
@@ -139,6 +150,18 @@ const Index = () => {
     });
   };
 
+  const handleDeleteProject = (projectId: number) => {
+    setDeleteProjectId(projectId);
+  };
+
+  const confirmDelete = () => {
+    if (!deleteProjectId) return;
+    
+    setProjects(projects.filter(p => p.id !== deleteProjectId));
+    toast.success("Project deleted successfully");
+    setDeleteProjectId(null);
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Header
@@ -172,6 +195,7 @@ const Index = () => {
                 key={project.id}
                 project={project}
                 onDonate={handleDonate}
+                onDelete={handleDeleteProject}
               />
             ))}
           </div>
@@ -231,6 +255,23 @@ const Index = () => {
         onClose={() => setShowCreateDialog(false)}
         onCreate={handleCreateProject}
       />
+
+      <AlertDialog open={!!deleteProjectId} onOpenChange={() => setDeleteProjectId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Project</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this project? This action cannot be undone and all associated data will be permanently removed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
