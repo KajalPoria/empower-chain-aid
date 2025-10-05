@@ -1,7 +1,13 @@
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Heart, Users, TrendingUp } from "lucide-react";
 
-const Hero = () => {
+const Hero = ({ onBrowseProjects, onSubmitProject }: { onBrowseProjects?: () => void; onSubmitProject?: () => void }) => {
+  const handleBrowseClick = () => {
+    const projectsSection = document.getElementById('projects');
+    projectsSection?.scrollIntoView({ behavior: 'smooth' });
+    onBrowseProjects?.();
+  };
+
   return (
     <section className="py-20 px-4 bg-gradient-to-br from-primary/5 via-accent/5 to-secondary/5">
       <div className="container mx-auto">
@@ -24,10 +30,10 @@ const Hero = () => {
           </p>
           
           <div className="flex flex-wrap gap-4 justify-center pt-4">
-            <Button size="lg" className="gap-2">
+            <Button size="lg" className="gap-2" onClick={handleBrowseClick}>
               Browse Projects <ArrowRight className="w-4 h-4" />
             </Button>
-            <Button size="lg" variant="outline">
+            <Button size="lg" variant="outline" onClick={onSubmitProject}>
               Submit Your Project
             </Button>
           </div>

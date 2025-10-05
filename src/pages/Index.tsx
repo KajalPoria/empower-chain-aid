@@ -147,7 +147,7 @@ const Index = () => {
         onDisconnectWallet={handleDisconnectWallet}
       />
       
-      <Hero />
+      <Hero onSubmitProject={() => setShowCreateDialog(true)} />
       
       <Dashboard stats={stats} />
       
