@@ -1,0 +1,212 @@
+// EmpowerChain Sophia Smart Contract
+// Micro-grant platform for specially-abled students on Aeternity blockchain
+
+@compiler >= 6
+
+include "List.aes"
+include "Option.aes"
+
+contract EmpowerChain =
+
+  record student_project = {
+    id: int,
+    student_address: address,
+    student_name: string,
+    project_title: string,
+    description: string,
+    funding_goal: int,
+    current_funding: int,
+    milestones: list(milestone),
+    is_active: bool,
+    created_at: int,
+    category: string
+  }
+
+  record milestone = {
+    id: int,
+    description: string,
+    target_amount: int,
+    is_completed: bool,
+    votes_for: int,
+    votes_against: int,
+    voters: map(address, bool)
+  }
+
+  record donation = {
+    donor: address,
+    project_id: int,
+    amount: int,
+    timestamp: int,
+    message: string
+  }
+
+  record state = {
+    projects: map(int, student_project),
+    donations: list(donation),
+    project_count: int,
+    total_donated: int,
+    platform_fee_percentage: int,
+    owner: address
+  }
+
+  entrypoint init() : state = {
+    projects = {},
+    donations = [],
+    project_count = 0,
+    total_donated = 0,
+    platform_fee_percentage = 2, // 2% platform fee
+    owner = Call.caller
+  }
+
+  // Create a new student project
+  stateful entrypoint create_project(
+    student_name: string,
+    project_title: string,
+    description: string,
+    funding_goal: int,
+    category: string,
+    milestone_descriptions: list(string),
+    milestone_amounts: list(int)
+  ) : int =
+    require(funding_goal > 0, "Funding goal must be positive")
+    require(List.length(milestone_descriptions) == List.length(milestone_amounts), "Milestone mismatch")
+    
+    let project_id = state.project_count + 1
+    let milestones = create_milestones(milestone_descriptions, milestone_amounts)
+    
+    let new_project = {
+      id = project_id,
+      student_address = Call.caller,
+      student_name = student_name,
+      project_title = project_title,
+      description = description,
+      funding_goal = funding_goal,
+      current_funding = 0,
+      milestones = milestones,
+      is_active = true,
+      created_at = Chain.timestamp,
+      category = category
+    }
+    
+    put(state{
+      projects[project_id] = new_project,
+      project_count = project_id
+    })
+    
+    project_id
+
+  // Helper function to create milestones
+  function create_milestones(descriptions: list(string), amounts: list(int)) : list(milestone) =
+    create_milestones'(descriptions, amounts, 1, [])
+  
+  function create_milestones'(descriptions: list(string), amounts: list(int), id: int, acc: list(milestone)) : list(milestone) =
+    switch((descriptions, amounts))
+      ([], []) => List.reverse(acc)
+      (desc :: rest_desc, amt :: rest_amt) =>
+        let m = {
+          id = id,
+          description = desc,
+          target_amount = amt,
+          is_completed = false,
+          votes_for = 0,
+          votes_against = 0,
+          voters = {}
+        }
+        create_milestones'(rest_desc, rest_amt, id + 1, m :: acc)
+      _ => abort("List length mismatch")
+
+  // Donate to a project
+  payable stateful entrypoint donate(project_id: int, message: string) : unit =
+    require(Map.member(project_id, state.projects), "Project not found")
+    require(Call.value > 0, "Donation must be positive")
+    
+    let project = state.projects[project_id]
+    require(project.is_active, "Project is not active")
+    
+    let donation_record = {
+      donor = Call.caller,
+      project_id = project_id,
+      amount = Call.value,
+      timestamp = Chain.timestamp,
+      message = message
+    }
+    
+    let updated_project = project{
+      current_funding = project.current_funding + Call.value
+    }
+    
+    put(state{
+      projects[project_id] = updated_project,
+      donations = donation_record :: state.donations,
+      total_donated = state.total_donated + Call.value
+    })
+
+  // Vote on milestone completion
+  stateful entrypoint vote_milestone(project_id: int, milestone_id: int, approve: bool) : unit =
+    require(Map.member(project_id, state.projects), "Project not found")
+    
+    let project = state.projects[project_id]
+    let milestones = project.milestones
+    let milestone = List.get(milestone_id - 1, milestones)
+    
+    require(!Map.member(Call.caller, milestone.voters), "Already voted")
+    
+    let updated_milestone = 
+      if(approve)
+        milestone{votes_for = milestone.votes_for + 1, voters[Call.caller] = true}
+      else
+        milestone{votes_against = milestone.votes_against + 1, voters[Call.caller] = true}
+    
+    let updated_milestones = List.update_at(milestone_id - 1, updated_milestone, milestones)
+    let updated_project = project{milestones = updated_milestones}
+    
+    put(state{projects[project_id] = updated_project})
+
+  // Complete milestone and release funds
+  stateful entrypoint complete_milestone(project_id: int, milestone_id: int) : unit =
+    require(Map.member(project_id, state.projects), "Project not found")
+    
+    let project = state.projects[project_id]
+    require(Call.caller == project.student_address, "Only student can complete milestone")
+    
+    let milestone = List.get(milestone_id - 1, project.milestones)
+    require(!milestone.is_completed, "Milestone already completed")
+    require(milestone.votes_for > milestone.votes_against, "Milestone not approved by voters")
+    
+    let release_amount = milestone.target_amount
+    let platform_fee = release_amount * state.platform_fee_percentage / 100
+    let student_amount = release_amount - platform_fee
+    
+    Chain.spend(project.student_address, student_amount)
+    Chain.spend(state.owner, platform_fee)
+    
+    let updated_milestone = milestone{is_completed = true}
+    let updated_milestones = List.update_at(milestone_id - 1, updated_milestone, project.milestones)
+    let updated_project = project{milestones = updated_milestones}
+    
+    put(state{projects[project_id] = updated_project})
+
+  // Get project details
+  entrypoint get_project(project_id: int) : student_project =
+    require(Map.member(project_id, state.projects), "Project not found")
+    state.projects[project_id]
+
+  // Get all projects
+  entrypoint get_all_projects() : list(student_project) =
+    Map.to_list(state.projects) |> List.map((x) => x[2])
+
+  // Get donations for a project
+  entrypoint get_project_donations(project_id: int) : list(donation) =
+    List.filter((d) => d.project_id == project_id, state.donations)
+
+  // Get platform statistics
+  entrypoint get_stats() : (int, int, int) =
+    (state.project_count, state.total_donated, List.length(state.donations))
+
+  // Emergency: Deactivate project (only owner)
+  stateful entrypoint deactivate_project(project_id: int) : unit =
+    require(Call.caller == state.owner, "Only owner can deactivate")
+    require(Map.member(project_id, state.projects), "Project not found")
+    
+    let project = state.projects[project_id]
+    put(state{projects[project_id] = project{is_active = false}})
